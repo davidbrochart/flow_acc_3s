@@ -102,12 +102,17 @@ def acc_flow(numba):
             flow_acc = np.load(acc_path + name + '_acc.npz')['a']
         except:
             flow_acc = np.zeros((6000, 6000), dtype='uint32')
-        try:
-            udlr_in = np.load(f'{urld_path}/udlr_{lat}_{lon}.npz')['a']
-        except:
+        if df.loc[(df.lat==lat) & (df.lon==lon), 'done1'].values[0]:
+            df.loc[(df.lat==lat) & (df.lon==lon), 'done2'] = True
+            try:
+                udlr_in = np.load(f'{urld_path}/udlr_{lat}_{lon}.npz')['a']
+            except:
+                udlr_in = np.zeros((4, 6000), dtype='uint32')
+        else:
             udlr_in = np.zeros((4, 6000), dtype='uint32')
         udlr_out = np.zeros((4, 6000+2), dtype='uint32')
         do_inside = not df.loc[(df.lat==lat) & (df.lon==lon), 'done1'].values[0]
+        df.loc[(df.lat==lat) & (df.lon==lon), 'done1'] = True
         print(f'Processing {name} (inside: {do_inside})')
         for row_i in tqdm(range(6000)):
             drop_pixel(flow_dir, flow_acc, udlr_in, udlr_out, do_inside, row_i)
@@ -116,10 +121,9 @@ def acc_flow(numba):
             os.remove(f'{udlr_path}/udlr_{lat}_{lon}.npz')
         except:
             pass
-        df.loc[(df.lat==lat) & (df.lon==lon), 'done1'] = True
-        df.loc[(df.lat==lat) & (df.lon==lon), 'done2'] = True
         var = [[5, 0, 1, 0, (0, 0), (1, -1), 5, -5], [-5, 0, 0, 1, (0, -1), (1, 0), 5, 5], [0, -5, 3, 2, (1, 0), (0, -1), -5, -5], [0, 5, 2, 3, (1, -1), (0, 0), -5, 5]]
         for i in range(4):
+            # do the sides
             if np.any(udlr_out[i][1:-1]):
                 lat2 = lat + var[i][0]
                 lon2 = lon + var[i][1]
@@ -131,6 +135,7 @@ def acc_flow(numba):
                     udlr = np.zeros((4, 6000), dtype='uint32')
                 udlr[var[i][2]] += udlr_out[var[i][3]][1:-1]
                 np.savez_compressed(udlr_name, a=udlr)
+            # do the corners
             if udlr_out[var[i][4]] != 0:
                 lat2 = lat + var[i][6]
                 lon2 = lon + var[i][7]

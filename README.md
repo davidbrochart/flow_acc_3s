@@ -19,8 +19,8 @@ python flowAcc3s.py -n
 ```
 
 Since it takes a lot of time to compute (days), the current state is saved after
-each computation of a tile. You can e.g. hit Ctrl-C and resume later. But if you
-want to start over, you first need to:
+each computation of a tile, so you can e.g. hit Ctrl-C and resume later. But if
+you want to start over, you first need to:
 
 ```
 rm -rf tiles/acc tmp
