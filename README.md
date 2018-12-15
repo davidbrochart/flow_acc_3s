@@ -12,16 +12,12 @@ cd ..
 python flowAcc3s.py
 ```
 
-For the Numba version, just run:
+For the Numba version, pass the `-n` flag. You can set the number of CPU cores
+you want to use with e.g. `-p 4`. Since it takes a lot of time to compute (days,
+depending on your CPUs), the current state is saved after each computation of a
+tile, so you can press Ctrl-C and resume later. But if you want to start over,
+you can do so with the `-r` flag.
 
 ```
-python flowAcc3s.py -n
-```
-
-Since it takes a lot of time to compute (days), the current state is saved after
-each computation of a tile, so you can e.g. hit Ctrl-C and resume later. But if
-you want to start over, you first need to:
-
-```
-rm -rf tiles/acc tmp
+python flowAcc3s.py -n -r -p 4
 ```
