@@ -67,8 +67,9 @@ def process_tile(cpu, drop_pixel, row, df, first_pass):
     udlr_out = np.zeros((4, 6000+2), dtype='uint32')
     do_inside = first_pass
     tqdm.write(f'Processing {name} (inside: {do_inside})')
-    for row_i in tqdm(range(6000)):
-        drop_pixel(flow_dir, flow_acc, udlr_in, udlr_out, do_inside, row_i)
+    row_nb = 60
+    for row_i in tqdm(range(0, 6000, row_nb)):
+        drop_pixel(flow_dir, flow_acc, udlr_in, udlr_out, do_inside, row_i, row_nb)
     np.savez_compressed(f'tiles/acc/3s/{name}_acc', a=flow_acc)
     if not first_pass:
         if os.path.exists(f'tmp/udlr/udlr_{lat}_{lon}.npz'):
@@ -84,6 +85,8 @@ def process_tile(cpu, drop_pixel, row, df, first_pass):
             udlr_name = f'tmp/udlr{cpu}/udlr_{lat2}_{lon2}'
             if os.path.exists(f'{udlr_name}.npz'):
                 udlr = np.load(f'{udlr_name}.npz')['a']
+            else:
+                udlr = np.zeros((4, 6000), dtype='uint32')
             udlr[var[i][2]] += udlr_out[var[i][3]][1:-1]
             np.savez_compressed(udlr_name, a=udlr)
         # do the corners

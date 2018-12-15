@@ -4,11 +4,12 @@ This is an attempt to fill that gap.
 
 The computation takes place in two passes:
 - first, pixels are dropped on each tile individually, and we keep track of the
-  pixels that flow into neighbors. This pass can easily by parallelized and is
-the most time consuming.
+  pixels that flow into neighbors. This pass can be parallelized and is the
+most time consuming.
 - second, we take those overflowing pixels and make them flow again. Note that
-  this pass is not parallelized, but it's quite fast anyway because pixels flow
-from the boundaries of the tiles only.
+  this pass is not parallelized, but it's quite fast anyway because pixels only
+flow from the boundaries of the tiles (the inside of the tiles doesn't have to
+be processed again).
 
 If you want to run the Cython version (which is slightly faster), you first need
 to compile it:
@@ -17,7 +18,6 @@ to compile it:
 cd cython
 python setup.py build_ext --inplace
 cd ..
-python flowAcc3s.py
 ```
 
 For the Numba version, pass the `-n` flag. You can set the number of CPU cores
