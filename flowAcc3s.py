@@ -7,7 +7,6 @@ from osgeo import gdal
 from pandas import DataFrame
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 import pickle
 from tqdm import tqdm
 import click
@@ -53,17 +52,17 @@ def process_tile(cpu, drop_pixel, row, df, first_pass):
     lat, lon = row['lat'], row['lon']
     flow_dir = get_flow_dir(row)
     name = row['tile'][:-len('_dir_grid.zip')]
-    try:
+    if os.path.exists(f'tiles/acc/3s/{name}_acc.npz'):
         flow_acc = np.load(f'tiles/acc/3s/{name}_acc.npz')['a']
-    except:
+    else:
         flow_acc = np.zeros((6000, 6000), dtype='uint32')
     if first_pass:
         udlr_in = np.zeros((4, 6000), dtype='uint32')
     else:
         df.loc[(df.lat==lat) & (df.lon==lon), 'done'] = True
-        try:
+        if os.path.exists(f'tmp/udlr/udlr_{lat}_{lon}.npz'):
             udlr_in = np.load(f'tmp/udlr/udlr_{lat}_{lon}.npz')['a']
-        except:
+        else:
             udlr_in = np.zeros((4, 6000), dtype='uint32')
     udlr_out = np.zeros((4, 6000+2), dtype='uint32')
     do_inside = first_pass
@@ -72,10 +71,8 @@ def process_tile(cpu, drop_pixel, row, df, first_pass):
         drop_pixel(flow_dir, flow_acc, udlr_in, udlr_out, do_inside, row_i)
     np.savez_compressed(f'tiles/acc/3s/{name}_acc', a=flow_acc)
     if not first_pass:
-        try:
+        if os.path.exists(f'tmp/udlr/udlr_{lat}_{lon}.npz'):
             os.remove(f'tmp/udlr/udlr_{lat}_{lon}.npz')
-        except:
-            pass
     var = [[5, 0, 1, 0, (0, 0), (1, -1), 5, -5], [-5, 0, 0, 1, (0, -1), (1, 0), 5, 5], [0, -5, 3, 2, (1, 0), (0, -1), -5, -5], [0, 5, 2, 3, (1, -1), (0, 0), -5, 5]]
     for i in range(4):
         # do the sides
@@ -85,10 +82,8 @@ def process_tile(cpu, drop_pixel, row, df, first_pass):
             if not first_pass:
                 df.loc[(df.lat==lat2) & (df.lon==lon2), 'done'] = False
             udlr_name = f'tmp/udlr{cpu}/udlr_{lat2}_{lon2}'
-            try:
+            if os.path.exists(f'{udlr_name}.npz'):
                 udlr = np.load(f'{udlr_name}.npz')['a']
-            except:
-                udlr = np.zeros((4, 6000), dtype='uint32')
             udlr[var[i][2]] += udlr_out[var[i][3]][1:-1]
             np.savez_compressed(udlr_name, a=udlr)
         # do the corners
@@ -98,9 +93,9 @@ def process_tile(cpu, drop_pixel, row, df, first_pass):
             if not first_pass:
                 df.loc[(df.lat==lat2) & (df.lon==lon2), 'done'] = False
             udlr_name = f'tmp/udlr{cpu}/udlr_{lat2}_{lon2}'
-            try:
+            if os.path.exists(f'{udlr_name}.npz'):
                 udlr = np.load(f'{udlr_name}.npz')['a']
-            except:
+            else:
                 udlr = np.zeros((4, 6000), dtype='uint32')
             udlr[var[i][5]] += udlr_out[var[i][4]]
             np.savez_compressed(udlr_name, a=udlr)
@@ -133,11 +128,14 @@ def acc_flow(numba, parallel, reset):
         df = pd.read_pickle(f'tmp/df.pkl')
     else:
         # first pass
-        try:
-            df = []
-            for cpu in range(parallel):
+        df = []
+        df_ok = True
+        for cpu in range(parallel):
+            if os.path.exists(f'tmp/df{cpu}.pkl'):
                 df.append(pd.read_pickle(f'tmp/df{cpu}.pkl'))
-        except:
+            else:
+                df_ok = False
+        if not df_ok:
             with open('tiles.json') as f:
                 dire = json.load(f)
             
