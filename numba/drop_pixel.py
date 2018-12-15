@@ -1,6 +1,6 @@
 from numba import jit
 
-@jit(nopython=True)
+@jit(nopython=True, nogil=True)
 def drop_pixel(flow_dir, flow_acc, udlr_in, udlr_out, do_inside, row_i):
     row_nb, col_nb = flow_dir.shape
     y0 = row_i
