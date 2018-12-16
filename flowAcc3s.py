@@ -162,12 +162,15 @@ def acc_flow(numba, parallel, reset):
             df = []
             i0 = 0
             size = len(df_keep) // parallel
-            i1 = size - 1
+            i1 = size
             for cpu in range(parallel):
+                if cpu == parallel - 1:
+                    i1 = None
                 df.append(df_keep.iloc[i0:i1].copy(deep=True))
                 df[cpu].to_pickle(f'tmp/df{cpu}.pkl')
-                i0 += size
-                i1 += size
+                if cpu != parallel - 1:
+                    i0 += size
+                    i1 += size
         threads = []
         for cpu in range(parallel):
             t = Thread(target=pass1, args=(cpu, drop_pixel, df[cpu]))
