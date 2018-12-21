@@ -52,10 +52,6 @@ def process_tile(cpu, drop_pixel, row, df, first_pass):
     lat, lon = row['lat'], row['lon']
     flow_dir = get_flow_dir(row)
     name = row['tile'][:-len('_dir_grid.zip')]
-    if os.path.exists(f'tiles/acc/3s/{name}_acc.npz'):
-        flow_acc = np.load(f'tiles/acc/3s/{name}_acc.npz')['a']
-    else:
-        flow_acc = np.zeros((6000, 6000), dtype='uint32')
     if first_pass:
         udlr_in = np.zeros((4, 6000), dtype='uint32')
     else:
@@ -63,7 +59,13 @@ def process_tile(cpu, drop_pixel, row, df, first_pass):
         if os.path.exists(f'tmp/udlr/udlr_{lat}_{lon}.npz'):
             udlr_in = np.load(f'tmp/udlr/udlr_{lat}_{lon}.npz')['a']
         else:
-            udlr_in = np.zeros((4, 6000), dtype='uint32')
+            tqdm.write(f'Nothing to do for {name}')
+            df.to_pickle('tmp/df.pkl')
+            return
+    if os.path.exists(f'tiles/acc/3s/{name}_acc.npz'):
+        flow_acc = np.load(f'tiles/acc/3s/{name}_acc.npz')['a']
+    else:
+        flow_acc = np.zeros((6000, 6000), dtype='uint32')
     udlr_out = np.zeros((4, 6000+2), dtype='uint32')
     do_inside = first_pass
     tqdm.write(f'Processing {name} (inside: {do_inside})')
@@ -80,9 +82,11 @@ def process_tile(cpu, drop_pixel, row, df, first_pass):
         if np.any(udlr_out[i][1:-1]):
             lat2 = lat + var[i][0]
             lon2 = lon + var[i][1]
-            if not first_pass:
+            if first_pass:
+                udlr_name = f'tmp/udlr{cpu}/udlr_{lat2}_{lon2}'
+            else:
                 df.loc[(df.lat==lat2) & (df.lon==lon2), 'done'] = False
-            udlr_name = f'tmp/udlr{cpu}/udlr_{lat2}_{lon2}'
+                udlr_name = f'tmp/udlr/udlr_{lat2}_{lon2}'
             if os.path.exists(f'{udlr_name}.npz'):
                 udlr = np.load(f'{udlr_name}.npz')['a']
             else:
@@ -93,9 +97,11 @@ def process_tile(cpu, drop_pixel, row, df, first_pass):
         if udlr_out[var[i][4]] != 0:
             lat2 = lat + var[i][6]
             lon2 = lon + var[i][7]
-            if not first_pass:
+            if first_pass:
+                udlr_name = f'tmp/udlr{cpu}/udlr_{lat2}_{lon2}'
+            else:
                 df.loc[(df.lat==lat2) & (df.lon==lon2), 'done'] = False
-            udlr_name = f'tmp/udlr{cpu}/udlr_{lat2}_{lon2}'
+                udlr_name = f'tmp/udlr/udlr_{lat2}_{lon2}'
             if os.path.exists(f'{udlr_name}.npz'):
                 udlr = np.load(f'{udlr_name}.npz')['a']
             else:
@@ -132,6 +138,7 @@ def acc_flow(numba, parallel, reset):
         df = pd.read_pickle(f'tmp/df.pkl')
     else:
         # first pass
+        print('1st pass')
         df = []
         df_ok = True
         for cpu in range(parallel):
@@ -182,14 +189,20 @@ def acc_flow(numba, parallel, reset):
         df = pd.concat(df)
         df['done'] = False
         df.to_pickle('tmp/df.pkl')
-        for cpu in range(parallel):
-            for fname in os.listdir(f'tmp/udlr{cpu}'):
-                udlr = np.load(f'tmp/udlr{cpu}/{fname}')['a']
-                if os.path.exists(f'tmp/udlr/{fname}'):
-                    udlr += np.load(f'tmp/udlr/{fname}')['a']
-                np.savez_compressed(f'tmp/udlr/{fname[:-4]}', a=udlr)
+        if parallel == 1:
+            shutil.copytree('tmp/udlr0', 'tmp/udlr')
+        else:
+            for cpu in range(parallel):
+                for fname in os.listdir(f'tmp/udlr{cpu}'):
+                    if os.path.exists(f'tmp/udlr/{fname}'):
+                        udlr = np.load(f'tmp/udlr{cpu}/{fname}')['a']
+                        udlr += np.load(f'tmp/udlr/{fname}')['a']
+                        np.savez_compressed(f'tmp/udlr/{fname[:-4]}', a=udlr)
+                    else:
+                        shutil.copyfile(f'tmp/udlr{cpu}/{fname}', f'tmp/udlr/{fname}')
 
     # second pass
+    print('2nd pass')
     pass2(drop_pixel, df)
 
 if __name__ == '__main__':
