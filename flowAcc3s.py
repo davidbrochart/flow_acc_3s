@@ -124,6 +124,7 @@ def acc_flow(numba, parallel, reset):
     from drop_pixel import drop_pixel
     os.makedirs('tiles/dir/3s', exist_ok=True)
     os.makedirs('tiles/acc/3s', exist_ok=True)
+    os.makedirs(f'tmp/udlr', exist_ok=True)
     for cpu in range(parallel):
         os.makedirs(f'tmp/udlr{cpu}', exist_ok=True)
 
