@@ -7,9 +7,9 @@ The computation takes place in two passes:
   pixels that flow into neighbors. This pass can be parallelized and is the
 most time consuming.
 - second, we take those overflowing pixels and make them flow again. Note that
-  this pass is not parallelized, but it's quite fast anyway because pixels only
-flow from the boundaries of the tiles (the inside of the tiles doesn't have to
-be processed again).
+  this pass is not parallelized (except for the file compression), but it's
+quite fast anyway because pixels only flow from the boundaries of the tiles (the
+inside of the tiles doesn't have to be processed again).
 
 If you want to run the Cython version (which is slightly faster), you first need
 to compile it:
@@ -17,15 +17,14 @@ to compile it:
 ```
 cd cython
 python setup.py build_ext --inplace
-cd ..
 ```
 
 For the Numba version, pass the `-n` flag. You can set the number of CPU cores
-you want to use with e.g. `-p 4`. Since it takes a lot of time to compute (days,
-depending on your CPUs), the current state is saved after each computation of a
-tile, so you can press Ctrl-C and resume later. But if you want to start over,
-you can do so with the `-r` flag.
+you want to use in each pass with e.g. `-p1 4 -p2 4`. Since it takes a lot of
+time to compute (days, depending on your CPUs), the current state is saved after
+each computation of a tile, so you can press Ctrl-C and resume later. But if you
+want to start over, you can do so with the `-r` flag.
 
 ```
-python flowAcc3s.py -n -r -p 4
+python flowAcc3s.py -n -r -p1 4 -p2 4
 ```

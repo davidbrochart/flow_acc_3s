@@ -159,9 +159,10 @@ def process_tile(cpu, drop_pixel, row, df, first_pass):
 
 @click.command()
 @click.option('-n', '--numba', is_flag=True, help='Use Numba as the computing backend (otherwise, use Cython).')
-@click.option('-p', '--parallel', default=1, help='Number of CPU cores to use (for first pass only).')
+@click.option('-p1', '--parallel1', default=1, help='Number of CPU cores to use for first pass.')
+@click.option('-p2', '--parallel2', default=1, help='Number of CPU cores to use for second pass.')
 @click.option('-r', '--reset', is_flag=1, help="Start the processing from scratch (don't download tiles if already downloaded).")
-def acc_flow(numba, parallel, reset):
+def acc_flow(numba, parallel1, parallel2, reset):
     if reset:
         shutil.rmtree('tmp', ignore_errors=True)
         shutil.rmtree('tiles/acc', ignore_errors=True)
@@ -175,7 +176,7 @@ def acc_flow(numba, parallel, reset):
     os.makedirs('tiles/dir/3s', exist_ok=True)
     os.makedirs('tiles/acc/3s', exist_ok=True)
     os.makedirs(f'tmp/udlr', exist_ok=True)
-    for cpu in range(parallel):
+    for cpu in range(parallel1):
         os.makedirs(f'tmp/udlr{cpu}', exist_ok=True)
 
     if os.path.exists('tmp/df.pkl'):
@@ -185,7 +186,7 @@ def acc_flow(numba, parallel, reset):
         print('1st pass')
         df = []
         df_ok = True
-        for cpu in range(parallel):
+        for cpu in range(parallel1):
             if os.path.exists(f'tmp/df{cpu}.pkl'):
                 df.append(pd.read_pickle(f'tmp/df{cpu}.pkl'))
             else:
@@ -213,18 +214,18 @@ def acc_flow(numba, parallel, reset):
             df_keep = df
             df = []
             i0 = 0
-            size = len(df_keep) // parallel
+            size = len(df_keep) // parallel1
             i1 = size
-            for cpu in range(parallel):
-                if cpu == parallel - 1:
+            for cpu in range(parallel1):
+                if cpu == parallel1 - 1:
                     i1 = None
                 df.append(df_keep.iloc[i0:i1].copy(deep=True))
                 df[cpu].to_pickle(f'tmp/df{cpu}.pkl')
-                if cpu != parallel - 1:
+                if cpu != parallel1 - 1:
                     i0 += size
                     i1 += size
         threads = []
-        for cpu in range(parallel):
+        for cpu in range(parallel1):
             t = Thread(target=pass1, args=(cpu, drop_pixel, df[cpu]))
             threads.append(t)
             t.start()
@@ -233,10 +234,10 @@ def acc_flow(numba, parallel, reset):
         df = pd.concat(df)
         df['done'] = False
         df.to_pickle('tmp/df.pkl')
-        if parallel == 1:
+        if parallel1 == 1:
             shutil.copytree('tmp/udlr0', 'tmp/udlr')
         else:
-            for cpu in range(parallel):
+            for cpu in range(parallel1):
                 for fname in os.listdir(f'tmp/udlr{cpu}'):
                     if os.path.exists(f'tmp/udlr/{fname}'):
                         udlr = np.load(f'tmp/udlr{cpu}/{fname}')['a']
@@ -247,7 +248,7 @@ def acc_flow(numba, parallel, reset):
 
     # second pass
     print('2nd pass')
-    pass2(parallel, drop_pixel, df)
+    pass2(parallel2, drop_pixel, df)
 
 if __name__ == '__main__':
     acc_flow()

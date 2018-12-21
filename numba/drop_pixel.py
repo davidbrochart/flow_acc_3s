@@ -55,14 +55,14 @@ def drop_pixel(flow_dir, flow_acc, udlr_in, udlr_out, do_inside, row_i, row_nb):
                     else:
                         done = True
                     if y == -1:
-                        udlr_out[0, x+1] += 1
+                        udlr_out[0, x+1] += nb
                         done = True
                     elif y == y_nb:
-                        udlr_out[1, x+1] += 1
+                        udlr_out[1, x+1] += nb
                         done = True
                     elif x == -1:
-                        udlr_out[2, y+1] += 1
+                        udlr_out[2, y+1] += nb
                         done = True
                     elif x == x_nb:
-                        udlr_out[3, y+1] += 1
+                        udlr_out[3, y+1] += nb
                         done = True
