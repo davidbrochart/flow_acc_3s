@@ -175,7 +175,6 @@ def acc_flow(numba, parallel1, parallel2, reset):
     from drop_pixel import drop_pixel
     os.makedirs('tiles/dir/3s', exist_ok=True)
     os.makedirs('tiles/acc/3s', exist_ok=True)
-    os.makedirs(f'tmp/udlr', exist_ok=True)
     for cpu in range(parallel1):
         os.makedirs(f'tmp/udlr{cpu}', exist_ok=True)
 
@@ -237,6 +236,7 @@ def acc_flow(numba, parallel1, parallel2, reset):
         if parallel1 == 1:
             shutil.copytree('tmp/udlr0', 'tmp/udlr')
         else:
+            os.makedirs(f'tmp/udlr', exist_ok=True)
             for cpu in range(parallel1):
                 for fname in os.listdir(f'tmp/udlr{cpu}'):
                     if os.path.exists(f'tmp/udlr/{fname}'):
