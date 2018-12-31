@@ -46,13 +46,18 @@ def pass1(cpu, drop_pixel, df):
 
 def pass2(parallel, drop_pixel, df):
     i = 0
+    acc_dict = {}
+    udlr_dict = {}
     while not np.all(df.done):
         row = df[df.done==False].iloc[0]
-        process_tile(0, drop_pixel, row, df, False)
+        process_tile(0, drop_pixel, row, df, False, acc_dict, udlr_dict)
         i += 1
-        if (i % 20) == 0:
+        if (i % 100) == 0:
             print('Compressing tiles...')
             compress_tiles(parallel)
+    for k, v in acc_dict.items():
+        np.savez_compressed(f'tiles/acc/3s/{k}', a=v)
+    compress_tiles(parallel)
 
 def compress_tiles(parallel):
     paths = []
@@ -68,7 +73,7 @@ def compress_tile(path):
     np.savez_compressed(path[:-4], a=a)
     os.remove(path)
 
-def process_tile(cpu, drop_pixel, row, df, first_pass):
+def process_tile(cpu, drop_pixel, row, df, first_pass, acc_dict={}, udlr_dict={}):
     lat, lon = row['lat'], row['lon']
     flow_dir = get_flow_dir(row)
     name = row['tile'][:-len('_dir_grid.zip')]
@@ -76,15 +81,19 @@ def process_tile(cpu, drop_pixel, row, df, first_pass):
         udlr_in = np.zeros((4, 6000), dtype='uint32')
     else:
         df.loc[(df.lat==lat) & (df.lon==lon), 'done'] = True
-        if os.path.exists(f'tmp/udlr/udlr_{lat}_{lon}.npz'):
+        if f'udlr_{lat}_{lon}' in udlr_dict:
+            udlr_in = udlr_dict[f'udlr_{lat}_{lon}']
+        elif os.path.exists(f'tmp/udlr/udlr_{lat}_{lon}.npz'):
             udlr_in = np.load(f'tmp/udlr/udlr_{lat}_{lon}.npz')['a']
         elif os.path.exists(f'tmp/udlr/udlr_{lat}_{lon}.npy'):
             udlr_in = np.load(f'tmp/udlr/udlr_{lat}_{lon}.npy')
         else:
             print(f'Nothing to do for {name}')
-            df.to_pickle('tmp/df.pkl')
+            #df.to_pickle('tmp/df.pkl')
             return
-    if os.path.exists(f'tiles/acc/3s/{name}_acc.npz'):
+    if (not first_pass) and (f'{name}_acc' in acc_dict):
+        flow_acc = acc_dict[f'{name}_acc']
+    elif os.path.exists(f'tiles/acc/3s/{name}_acc.npz'):
         flow_acc = np.load(f'tiles/acc/3s/{name}_acc.npz')['a']
     elif os.path.exists(f'tiles/acc/3s/{name}_acc.npy'):
         flow_acc = np.load(f'tiles/acc/3s/{name}_acc.npy')
@@ -99,7 +108,16 @@ def process_tile(cpu, drop_pixel, row, df, first_pass):
     if first_pass:
         np.savez_compressed(f'tiles/acc/3s/{name}_acc', a=flow_acc)
     else:
-        np.save(f'tiles/acc/3s/{name}_acc', flow_acc)
+        if (f'{name}_acc' in acc_dict) or (len(acc_dict) < 10):
+            acc_dict[f'{name}_acc'] = flow_acc
+        else:
+            first = list(acc_dict.keys())[0]
+            print(f'Saving {first}')
+            #np.save(f'tiles/acc/3s/{first}', acc_dict[first])
+            del acc_dict[first]
+            acc_dict[f'{name}_acc'] = flow_acc
+        if f'udlr_{lat}_{lon}' in udlr_dict:
+            del udlr_dict[f'udlr_{lat}_{lon}']
         if os.path.exists(f'tiles/acc/3s/{name}_acc.npz'):
             os.remove(f'tiles/acc/3s/{name}_acc.npz')
         if os.path.exists(f'tmp/udlr/udlr_{lat}_{lon}.npz'):
@@ -117,7 +135,9 @@ def process_tile(cpu, drop_pixel, row, df, first_pass):
             else:
                 df.loc[(df.lat==lat2) & (df.lon==lon2), 'done'] = False
                 udlr_name = f'tmp/udlr/udlr_{lat2}_{lon2}'
-            if os.path.exists(f'{udlr_name}.npz'):
+            if (not first_pass) and (os.path.basename(udlr_name) in udlr_dict):
+                udlr = udlr_dict[os.path.basename(udlr_name)]
+            elif os.path.exists(f'{udlr_name}.npz'):
                 udlr = np.load(f'{udlr_name}.npz')['a']
             elif os.path.exists(f'{udlr_name}.npy'):
                 udlr = np.load(f'{udlr_name}.npy')
@@ -127,7 +147,14 @@ def process_tile(cpu, drop_pixel, row, df, first_pass):
             if first_pass:
                 np.savez_compressed(udlr_name, a=udlr)
             else:
-                np.save(udlr_name, udlr)
+                if (os.path.basename(udlr_name) in udlr_dict) or (len(udlr_dict) < 10):
+                    udlr_dict[os.path.basename(udlr_name)] = udlr
+                else:
+                    first = list(udlr_dict.keys())[0]
+                    print(f'Saving {first}')
+                    #np.save(f'tmp/udlr/{first}', udlr_dict[first])
+                    del udlr_dict[first]
+                    udlr_dict[os.path.basename(udlr_name)] = udlr
                 if os.path.exists(f'{udlr_name}.npz'):
                     os.remove(f'{udlr_name}.npz')
         # do the corners
@@ -139,7 +166,9 @@ def process_tile(cpu, drop_pixel, row, df, first_pass):
             else:
                 df.loc[(df.lat==lat2) & (df.lon==lon2), 'done'] = False
                 udlr_name = f'tmp/udlr/udlr_{lat2}_{lon2}'
-            if os.path.exists(f'{udlr_name}.npz'):
+            if (not first_pass) and (os.path.basename(udlr_name) in udlr_dict):
+                udlr = udlr_dict[os.path.basename(udlr_name)]
+            elif os.path.exists(f'{udlr_name}.npz'):
                 udlr = np.load(f'{udlr_name}.npz')['a']
             elif os.path.exists(f'{udlr_name}.npy'):
                 udlr = np.load(f'{udlr_name}.npy')
@@ -149,13 +178,21 @@ def process_tile(cpu, drop_pixel, row, df, first_pass):
             if first_pass:
                 np.savez_compressed(udlr_name, a=udlr)
             else:
-                np.save(udlr_name, udlr)
+                if (os.path.basename(udlr_name) in udlr_dict) or (len(udlr_dict) < 10):
+                    udlr_dict[os.path.basename(udlr_name)] = udlr
+                else:
+                    first = list(udlr_dict.keys())[0]
+                    print(f'Saving {first}')
+                    #np.save(f'tmp/udlr/{first}', udlr_dict[first])
+                    del udlr_dict[first]
+                    udlr_dict[os.path.basename(udlr_name)] = udlr
                 if os.path.exists(f'{udlr_name}.npz'):
                     os.remove(f'{udlr_name}.npz')
     if first_pass:
         df.to_pickle(f'tmp/df{cpu}.pkl')
     else:
-        df.to_pickle('tmp/df.pkl')
+        #df.to_pickle('tmp/df.pkl')
+        pass
 
 @click.command()
 @click.option('-n', '--numba', is_flag=True, help='Use Numba as the computing backend (otherwise, use Cython).')
@@ -233,6 +270,7 @@ def acc_flow(numba, parallel1, parallel2, reset):
         df = pd.concat(df)
         df['done'] = False
         df.to_pickle('tmp/df.pkl')
+        shutil.copytree('tiles/acc', 'tiles/acc_pass1')
         if parallel1 == 1:
             shutil.copytree('tmp/udlr0', 'tmp/udlr')
         else:
