@@ -89,7 +89,7 @@ def process_tile(cpu, drop_pixel, row, df, first_pass, acc_dict={}, udlr_dict={}
             udlr_in = np.load(f'tmp/udlr/udlr_{lat}_{lon}.npy')
         else:
             print(f'Nothing to do for {name}')
-            #df.to_pickle('tmp/df.pkl')
+            df.to_pickle('tmp/df.pkl')
             return
     if (not first_pass) and (f'{name}_acc' in acc_dict):
         flow_acc = acc_dict[f'{name}_acc']
@@ -113,7 +113,7 @@ def process_tile(cpu, drop_pixel, row, df, first_pass, acc_dict={}, udlr_dict={}
         else:
             first = list(acc_dict.keys())[0]
             print(f'Saving {first}')
-            #np.save(f'tiles/acc/3s/{first}', acc_dict[first])
+            np.save(f'tiles/acc/3s/{first}', acc_dict[first])
             del acc_dict[first]
             acc_dict[f'{name}_acc'] = flow_acc
         if f'udlr_{lat}_{lon}' in udlr_dict:
@@ -152,7 +152,7 @@ def process_tile(cpu, drop_pixel, row, df, first_pass, acc_dict={}, udlr_dict={}
                 else:
                     first = list(udlr_dict.keys())[0]
                     print(f'Saving {first}')
-                    #np.save(f'tmp/udlr/{first}', udlr_dict[first])
+                    np.save(f'tmp/udlr/{first}', udlr_dict[first])
                     del udlr_dict[first]
                     udlr_dict[os.path.basename(udlr_name)] = udlr
                 if os.path.exists(f'{udlr_name}.npz'):
@@ -183,7 +183,7 @@ def process_tile(cpu, drop_pixel, row, df, first_pass, acc_dict={}, udlr_dict={}
                 else:
                     first = list(udlr_dict.keys())[0]
                     print(f'Saving {first}')
-                    #np.save(f'tmp/udlr/{first}', udlr_dict[first])
+                    np.save(f'tmp/udlr/{first}', udlr_dict[first])
                     del udlr_dict[first]
                     udlr_dict[os.path.basename(udlr_name)] = udlr
                 if os.path.exists(f'{udlr_name}.npz'):
@@ -191,8 +191,7 @@ def process_tile(cpu, drop_pixel, row, df, first_pass, acc_dict={}, udlr_dict={}
     if first_pass:
         df.to_pickle(f'tmp/df{cpu}.pkl')
     else:
-        #df.to_pickle('tmp/df.pkl')
-        pass
+        df.to_pickle('tmp/df.pkl')
 
 @click.command()
 @click.option('-n', '--numba', is_flag=True, help='Use Numba as the computing backend (otherwise, use Cython).')
