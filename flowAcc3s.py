@@ -66,11 +66,11 @@ def pass2(parallel, drop_pixel, df):
         a = np.load(f'tiles/acc/3s/{name}.npz')['a']
         driver = gdal.GetDriverByName('GTiff')
         ds = driver.Create(f'tiles/acc/3s/{name}.tif', a.shape[1], a.shape[0], 1, gdal.GDT_UInt32)
-        ds.SetGeoTransform((row[1].lon, 1/240, 0.0, row[1].lat, 0.0, -1/240))
+        ds.SetGeoTransform((row[1].lon, 5/6000, 0.0, row[1].lat, 0.0, -5/6000))
         ds.SetProjection('GEOGCS[\"WGS 84\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563,AUTHORITY[\"EPSG\",\"7030\"]],AUTHORITY[\"EPSG\",\"6326\"]],PRIMEM[\"Greenwich\",0],UNIT[\"degree\",0.0174532925199433],AUTHORITY[\"EPSG\",\"4326\"]]')
         ds.GetRasterBand(1).WriteArray(a)
         ds = None
-        zipfile.ZipFile(f'tiles/acc/3s/{name}.zip', mode='w', compression=zipfile.ZIP_DEFLATED).write(f'tiles/acc/3s/{name}.tif')
+        zipfile.ZipFile(f'tiles/acc/3s/{name}.zip', mode='w', compression=zipfile.ZIP_DEFLATED).write(f'tiles/acc/3s/{name}.tif', arcname=f'{name}.tif')
         os.remove(f'tiles/acc/3s/{name}.tif')
         os.remove(f'tiles/acc/3s/{name}.npz')
 
