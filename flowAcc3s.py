@@ -7,6 +7,7 @@ from osgeo import gdal
 from pandas import DataFrame
 import pandas as pd
 import numpy as np
+from osgeo import gdal
 import pickle
 from tqdm import tqdm
 import click
@@ -58,6 +59,20 @@ def pass2(parallel, drop_pixel, df):
     for k, v in acc_dict.items():
         np.savez_compressed(f'tiles/acc/3s/{k}', a=v)
     compress_tiles(parallel)
+    # create TIFF files
+    print('Creating TIFF files')
+    for row in tqdm(df.iterrows()):
+        name = row[1].tile.replace('_dir_grid.zip', '_acc')
+        a = np.load(f'tiles/acc/3s/{name}.npz')['a']
+        driver = gdal.GetDriverByName('GTiff')
+        ds = driver.Create(f'tiles/acc/3s/{name}.tif', a.shape[1], a.shape[0], 1, gdal.GDT_UInt32)
+        ds.SetGeoTransform((row[1].lon, 1/240, 0.0, row[1].lat, 0.0, -1/240))
+        ds.SetProjection('GEOGCS[\"WGS 84\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563,AUTHORITY[\"EPSG\",\"7030\"]],AUTHORITY[\"EPSG\",\"6326\"]],PRIMEM[\"Greenwich\",0],UNIT[\"degree\",0.0174532925199433],AUTHORITY[\"EPSG\",\"4326\"]]')
+        ds.GetRasterBand(1).WriteArray(a)
+        ds = None
+        zipfile.ZipFile(f'tiles/acc/3s/{name}.zip', mode='w', compression=zipfile.ZIP_DEFLATED).write(f'tiles/acc/3s/{name}.tif')
+        os.remove(f'tiles/acc/3s/{name}.tif')
+        os.remove(f'tiles/acc/3s/{name}.npz')
 
 def compress_tiles(parallel):
     paths = []
@@ -269,7 +284,6 @@ def acc_flow(numba, parallel1, parallel2, reset):
         df = pd.concat(df)
         df['done'] = False
         df.to_pickle('tmp/df.pkl')
-        shutil.copytree('tiles/acc', 'tiles/acc_pass1')
         if parallel1 == 1:
             shutil.copytree('tmp/udlr0', 'tmp/udlr')
         else:
