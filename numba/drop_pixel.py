@@ -1,7 +1,7 @@
 from numba import jit
 
 @jit(nopython=True, nogil=True)
-def drop_pixel(flow_dir, flow_acc, udlr_in, udlr_out, do_inside, row_i, row_nb):
+def drop_pixel(flow_dir, flow_acc, udlr_in, udlr_out, pix_area, do_inside, row_i, row_nb):
     y_nb, x_nb = flow_dir.shape
     for y0 in range(row_i, row_i+row_nb):
         for x0 in range(x_nb):
@@ -22,14 +22,14 @@ def drop_pixel(flow_dir, flow_acc, udlr_in, udlr_out, do_inside, row_i, row_nb):
                 # inside tile
                 nb = 0
                 do_it = do_inside
-            if (flow_acc[y0, x0] != 0) and (nb == 0):
+            if (flow_acc[y0, x0] > 0.) and (nb == 0.):
                 do_it = False
             if do_it:
                 y, x = y0, x0
                 done = False
                 while not done:
-                    if flow_acc[y, x] == 0:
-                        nb += 1
+                    if flow_acc[y, x] == 0.:
+                        nb += pix_area[y]
                     flow_acc[y, x] += nb
                     dire = flow_dir[y, x]
                     if dire == 1:
@@ -53,6 +53,8 @@ def drop_pixel(flow_dir, flow_acc, udlr_in, udlr_out, do_inside, row_i, row_nb):
                         y -= 1
                         x += 1
                     else:
+                        if dire == 255:
+                            flow_acc[y, x] = 0.
                         done = True
                     if y == -1:
                         udlr_out[0, x+1] += nb

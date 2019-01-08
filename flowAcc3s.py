@@ -3,6 +3,9 @@ import sys
 import zipfile
 import requests
 import shutil
+from shapely.geometry.polygon import Polygon
+from shapely.ops import transform
+import pyproj
 from osgeo import gdal
 from pandas import DataFrame
 import pandas as pd
@@ -14,6 +17,20 @@ import click
 from threading import Thread
 from multiprocessing.dummy import Pool as ThreadPool
 import json
+
+# pixel area only depends on latitude (not longitude)
+# we re-project WGS84 to cylindrical equal area
+def pixel_area(pix_deg):
+    project = lambda x, y: pyproj.transform(pyproj.Proj(init='epsg:4326'), pyproj.Proj(proj='cea'), x, y)
+    offset = pix_deg / 2
+    lts = np.arange(90-offset, -90, -pix_deg)
+    area = np.empty_like(lts)
+    lon = 0
+    for y, lat in enumerate(lts):
+        pixel1 = Polygon([(lon - offset, lat + offset), (lon + offset, lat + offset), (lon + offset, lat - offset), (lon - offset, lat - offset)])
+        pixel2 = transform(project, pixel1)
+        area[y] = pixel2.area
+    return area
 
 def get_flow_dir(row):
     if not os.path.exists(f'tiles/dir/3s/{row.tile}'):
@@ -30,7 +47,7 @@ def get_flow_dir(row):
         flow_dir = flow_dir.ReadAsArray()
         shutil.rmtree(f'tmp/{row.tile[:-9]}')
         # data is padded into a 6000x6000 array (some tiles may be smaller):
-        array_5x5 = np.zeros((6000, 6000), dtype = 'uint8')
+        array_5x5 = np.ones((6000, 6000), dtype='uint8') * 255
         y0 = int(round((geo[3] - row.lat) / geo[5]))
         y1 = 6000 - int(round(((row.lat - 5) - (geo[3] + geo[5] * ySize)) / geo[5]))
         x0 = int(round((geo[0] - row.lon) / geo[1]))
@@ -38,20 +55,20 @@ def get_flow_dir(row):
         array_5x5[y0:y1, x0:x1] = flow_dir
     except:
         tqdm.write('Not a ZIP file!')
-        array_5x5 = np.zeros((6000, 6000), dtype = 'uint8')
+        array_5x5 = np.zeros((6000, 6000), dtype='uint8')
     return array_5x5
 
-def pass1(cpu, drop_pixel, df):
+def pass1(cpu, drop_pixel, pix_area, df):
     for row in df.iterrows():
-        process_tile(cpu, drop_pixel, row[1], df, True)
+        process_tile(cpu, drop_pixel, pix_area, row[1], df, True)
 
-def pass2(parallel, drop_pixel, df):
+def pass2(parallel, drop_pixel, pix_area, df):
     i = 0
     acc_dict = {}
     udlr_dict = {}
     while not np.all(df.done):
         row = df[df.done==False].iloc[0]
-        process_tile(0, drop_pixel, row, df, False, acc_dict, udlr_dict)
+        process_tile(0, drop_pixel, pix_area, row, df, False, acc_dict, udlr_dict)
         i += 1
         if (i % 100) == 0:
             print('Compressing tiles...')
@@ -65,10 +82,12 @@ def pass2(parallel, drop_pixel, df):
         name = row[1].tile.replace('_dir_grid.zip', '_acc')
         a = np.load(f'tiles/acc/3s/{name}.npz')['a']
         driver = gdal.GetDriverByName('GTiff')
-        ds = driver.Create(f'tiles/acc/3s/{name}.tif', a.shape[1], a.shape[0], 1, gdal.GDT_UInt32, ['COMPRESS=LZW'])
+        ds = driver.Create(f'tiles/acc/3s/{name}.tif', a.shape[1], a.shape[0], 1, gdal.GDT_Float64, ['COMPRESS=LZW'])
         ds.SetGeoTransform((row[1].lon, 5/6000, 0.0, row[1].lat, 0.0, -5/6000))
         ds.SetProjection('GEOGCS[\"WGS 84\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563,AUTHORITY[\"EPSG\",\"7030\"]],AUTHORITY[\"EPSG\",\"6326\"]],PRIMEM[\"Greenwich\",0],UNIT[\"degree\",0.0174532925199433],AUTHORITY[\"EPSG\",\"4326\"]]')
-        ds.GetRasterBand(1).WriteArray(a)
+        band = ds.GetRasterBand(1)
+        band.WriteArray(a)
+        band.SetNoDataValue(0.)
         ds = None
         os.remove(f'tiles/acc/3s/{name}.npz')
 
@@ -86,12 +105,12 @@ def compress_tile(path):
     np.savez_compressed(path[:-4], a=a)
     os.remove(path)
 
-def process_tile(cpu, drop_pixel, row, df, first_pass, acc_dict={}, udlr_dict={}):
+def process_tile(cpu, drop_pixel, pix_area, row, df, first_pass, acc_dict={}, udlr_dict={}):
     lat, lon = row['lat'], row['lon']
     flow_dir = get_flow_dir(row)
     name = row['tile'][:-len('_dir_grid.zip')]
     if first_pass:
-        udlr_in = np.zeros((4, 6000), dtype='uint32')
+        udlr_in = np.zeros((4, 6000), dtype='float64')
     else:
         df.loc[(df.lat==lat) & (df.lon==lon), 'done'] = True
         if f'udlr_{lat}_{lon}' in udlr_dict:
@@ -111,13 +130,14 @@ def process_tile(cpu, drop_pixel, row, df, first_pass, acc_dict={}, udlr_dict={}
     elif os.path.exists(f'tiles/acc/3s/{name}_acc.npy'):
         flow_acc = np.load(f'tiles/acc/3s/{name}_acc.npy')
     else:
-        flow_acc = np.zeros((6000, 6000), dtype='uint32')
-    udlr_out = np.zeros((4, 6000+2), dtype='uint32')
+        flow_acc = np.zeros((6000, 6000), dtype='float64')
+    udlr_out = np.zeros((4, 6000+2), dtype='float64')
     do_inside = first_pass
     tqdm.write(f'Processing {name} (inside: {do_inside})')
     row_nb = 60
     for row_i in tqdm(range(0, 6000, row_nb)):
-        drop_pixel(flow_dir, flow_acc, udlr_in, udlr_out, do_inside, row_i, row_nb)
+        pix_area2 = pix_area[6000*((90-lat)//5):]
+        drop_pixel(flow_dir, flow_acc, udlr_in, udlr_out, pix_area2, do_inside, row_i, row_nb)
     if first_pass:
         np.savez_compressed(f'tiles/acc/3s/{name}_acc', a=flow_acc)
     else:
@@ -155,7 +175,7 @@ def process_tile(cpu, drop_pixel, row, df, first_pass, acc_dict={}, udlr_dict={}
             elif os.path.exists(f'{udlr_name}.npy'):
                 udlr = np.load(f'{udlr_name}.npy')
             else:
-                udlr = np.zeros((4, 6000), dtype='uint32')
+                udlr = np.zeros((4, 6000), dtype='float64')
             udlr[var[i][2]] += udlr_out[var[i][3]][1:-1]
             if first_pass:
                 np.savez_compressed(udlr_name, a=udlr)
@@ -186,7 +206,7 @@ def process_tile(cpu, drop_pixel, row, df, first_pass, acc_dict={}, udlr_dict={}
             elif os.path.exists(f'{udlr_name}.npy'):
                 udlr = np.load(f'{udlr_name}.npy')
             else:
-                udlr = np.zeros((4, 6000), dtype='uint32')
+                udlr = np.zeros((4, 6000), dtype='float64')
             udlr[var[i][5]] += udlr_out[var[i][4]]
             if first_pass:
                 np.savez_compressed(udlr_name, a=udlr)
@@ -226,6 +246,12 @@ def acc_flow(numba, parallel1, parallel2, reset):
     os.makedirs('tiles/acc/3s', exist_ok=True)
     for cpu in range(parallel1):
         os.makedirs(f'tmp/udlr{cpu}', exist_ok=True)
+    if os.path.exists('tmp/pix_area.npy'):
+        pix_area = np.load('tmp/pix_area.npy')
+    else:
+        pix_area = pixel_area(5 / 6000)
+        pix_area = pix_area / np.max(pix_area)
+        np.save('tmp/pix_area', pix_area)
 
     if os.path.exists('tmp/df.pkl'):
         df = pd.read_pickle(f'tmp/df.pkl')
@@ -274,7 +300,7 @@ def acc_flow(numba, parallel1, parallel2, reset):
                     i1 += size
         threads = []
         for cpu in range(parallel1):
-            t = Thread(target=pass1, args=(cpu, drop_pixel, df[cpu]))
+            t = Thread(target=pass1, args=(cpu, drop_pixel, pix_area, df[cpu]))
             threads.append(t)
             t.start()
         for t in threads:
@@ -297,7 +323,7 @@ def acc_flow(numba, parallel1, parallel2, reset):
 
     # second pass
     print('2nd pass')
-    pass2(parallel2, drop_pixel, df)
+    pass2(parallel2, drop_pixel, pix_area, df)
 
 if __name__ == '__main__':
     acc_flow()

@@ -1,4 +1,4 @@
-[HydroSHEDS](https://www.hydrosheds.org) provides flow directions at 3sec
+[HydroSHEDS](https://www.hydrosheds.org) provides flow directions at 3 seconds
 resolution, but flow accumulation is only available at 30s and 15s resolutions.
 This is an attempt to fill that gap.
 
@@ -10,6 +10,14 @@ most time consuming.
   this pass is not parallelized (except for the file compression), but it's
 quite fast anyway because pixels only flow from the boundaries of the tiles (the
 inside of the tiles doesn't have to be processed again).
+
+Usually, flow accumulation is just pixel-based: when one pixel flows into
+another, we just increment the flow. This doesn't take into account the area of
+a pixel, but if we want to use flow accumulation for hydrologic purposes, we
+must correct for the fact that a pixel at the equator is bigger than a pixel at
+e.g. latitude 60N (since WGS84 is not an equal area projection). Here we do
+this correction, and so the resulting flow accumulation data cannot be of
+integer type (it is a `float64`).
 
 If you want to run the Cython version (which is slightly faster), you first need
 to compile it:

@@ -13,11 +13,11 @@ from cpython cimport bool
 cimport cython
 @cython.boundscheck(False) # turn off bounds-checking for entire function
 @cython.wraparound(False)  # turn off negative index wrapping for entire function
-def drop_pixel(np.ndarray[np.uint8_t, ndim=2] flow_dir, np.ndarray[np.uint32_t, ndim=2] flow_acc, np.ndarray[np.uint32_t, ndim=2] udlr_in, np.ndarray[np.uint32_t, ndim=2] udlr_out, bool do_inside, int row_i, int row_nb):
+def drop_pixel(np.ndarray[np.uint8_t, ndim=2] flow_dir, np.ndarray[np.float64_t, ndim=2] flow_acc, np.ndarray[np.float64_t, ndim=2] udlr_in, np.ndarray[np.float64_t, ndim=2] udlr_out, np.ndarray[np.float64_t, ndim=1] pix_area, bool do_inside, int row_i, int row_nb):
     cdef int y_nb, x_nb
     cdef int y0, x0, y, x
     cdef int do_it
-    cdef int nb
+    cdef double nb
     cdef int done
     cdef int dire
     cdef int do_inside_i
@@ -44,14 +44,14 @@ def drop_pixel(np.ndarray[np.uint8_t, ndim=2] flow_dir, np.ndarray[np.uint32_t, 
                     # inside tile
                     nb = 0
                     do_it = do_inside_i
-                if (flow_acc[y0, x0] != 0) and (nb == 0):
+                if (flow_acc[y0, x0] > 0.) and (nb == 0.):
                     do_it = 0
                 if do_it == 1:
                     y, x = y0, x0
                     done = 0
                     while done == 0:
-                        if flow_acc[y, x] == 0:
-                            nb += 1
+                        if flow_acc[y, x] == 0.:
+                            nb += pix_area[y]
                         flow_acc[y, x] += nb
                         dire = flow_dir[y, x]
                         if dire == 1:
@@ -75,6 +75,8 @@ def drop_pixel(np.ndarray[np.uint8_t, ndim=2] flow_dir, np.ndarray[np.uint32_t, 
                             y -= 1
                             x += 1
                         else:
+                            if dire == 255:
+                                flow_acc[y, x] = 0.
                             done = 1
                         if y == -1:
                             udlr_out[0, x+1] += nb
