@@ -17,6 +17,7 @@ import click
 from threading import Thread
 from multiprocessing.dummy import Pool as ThreadPool
 import json
+import subprocess
 
 # pixel area only depends on latitude (not longitude)
 # we re-project WGS84 to cylindrical equal area
@@ -90,6 +91,8 @@ def pass2(parallel, drop_pixel, pix_area, df):
         band.SetNoDataValue(0.)
         ds = None
         os.remove(f'tiles/acc/3s/{name}.npz')
+    print('Creating VRT (Virtual Dataset)')
+    subprocess.check_call('gdalbuildvrt acc.vrt tiles/acc/3s/*.tif', shell=True)
 
 def compress_tiles(parallel):
     paths = []
